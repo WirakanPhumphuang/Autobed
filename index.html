@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>AutoBed - แจ้งเตือนพยาบาล</title>
+<style>
+  :root {
+    --bg: #f4f6f8; --card: #ffffff; --text: #17202a; --muted: #5d6b79; --line: #d9e0e6;
+    --idle-bg: #e9edf1; --idle-fg: #44515e;
+    --ok-bg: #dff3e4;   --ok-fg: #14532d;
+    --warn-bg: #fdf0c9; --warn-fg: #6b4b00;
+    --alert-bg: #fbdcd8; --alert-fg: #8a1c12;
+    --info-bg: #dcebfb; --info-fg: #0f3f73;
+    --btn: #1d4ed8; --btn-fg: #ffffff; --btn2: #e4e9ee; --btn2-fg: #17202a;
+    box-sizing: border-box;
+    padding-top: env(safe-area-inset-top, 0px);
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #0f151b; --card: #19222b; --text: #e8eef3; --muted: #9aa9b7; --line: #2c3945;
+      --idle-bg: #26313b; --idle-fg: #c3cfda;
+      --ok-bg: #12351f;   --ok-fg: #a8e6bc;
+      --warn-bg: #3d3109; --warn-fg: #f3d98a;
+      --alert-bg: #4a1712; --alert-fg: #ffb4ab;
+      --info-bg: #11304f; --info-fg: #a9cff5;
+      --btn: #3b82f6; --btn-fg: #ffffff; --btn2: #26313b; --btn2-fg: #e8eef3;
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #0f151b; --card: #19222b; --text: #e8eef3; --muted: #9aa9b7; --line: #2c3945;
+    --idle-bg: #26313b; --idle-fg: #c3cfda;
+    --ok-bg: #12351f;   --ok-fg: #a8e6bc;
+    --warn-bg: #3d3109; --warn-fg: #f3d98a;
+    --alert-bg: #4a1712; --alert-fg: #ffb4ab;
+    --info-bg: #11304f; --info-fg: #a9cff5;
+    --btn: #3b82f6; --btn-fg: #ffffff; --btn2: #26313b; --btn2-fg: #e8eef3;
+  }
+  html { scroll-padding-top: env(safe-area-inset-top, 0px); }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: -apple-system, "Segoe UI", "Noto Sans Thai", Tahoma, sans-serif;
+    line-height: 1.45; -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 560px; margin: 0 auto; padding: 14px 14px 28px; }
+  h1 { font-size: 1.15rem; margin: 6px 2px 2px; }
+  .sub { color: var(--muted); font-size: .85rem; margin: 0 2px 12px; }
+  .banner { background: var(--warn-bg); color: var(--warn-fg); border-radius: 12px; padding: 10px 12px; margin-bottom: 12px; font-size: .9rem; }
+  .hidden { display: none !important; }
+
+  .status { border-radius: 18px; padding: 22px 16px; text-align: center; background: var(--idle-bg); color: var(--idle-fg);
+            transition: background .2s, color .2s; }
+  .status .icon { font-size: 3rem; line-height: 1; }
+  .status .msg { font-size: 1.5rem; font-weight: 700; margin-top: 8px; }
+  .status .when { font-size: .85rem; opacity: .85; margin-top: 4px; }
+  .status.ok    { background: var(--ok-bg);    color: var(--ok-fg); }
+  .status.warn  { background: var(--warn-bg);  color: var(--warn-fg); }
+  .status.info  { background: var(--info-bg);  color: var(--info-fg); }
+  .status.alert { background: var(--alert-bg); color: var(--alert-fg); animation: pulse 1s infinite; }
+  @keyframes pulse { 50% { box-shadow: 0 0 0 8px rgba(220, 38, 38, .25); } }
+
+  .row { display: flex; gap: 8px; margin: 12px 0 6px; flex-wrap: wrap; }
+  button { font: inherit; border: 0; border-radius: 12px; padding: 12px 14px; min-height: 46px; cursor: pointer;
+           background: var(--btn2); color: var(--btn2-fg); flex: 1 1 auto; }
+  button.primary { background: var(--btn); color: var(--btn-fg); font-weight: 600; flex: 2 1 160px; }
+  button:disabled { opacity: .5; }
+  .conn { font-size: .9rem; color: var(--muted); margin: 4px 2px 10px; }
+  .hint { background: var(--info-bg); color: var(--info-fg); border-radius: 12px; padding: 10px 12px; font-size: .88rem; margin-bottom: 10px; }
+
+  h2 { font-size: 1rem; margin: 18px 2px 8px; }
+  ul.log { list-style: none; margin: 0; padding: 0; background: var(--card); border: 1px solid var(--line); border-radius: 14px; overflow: hidden; }
+  ul.log li { padding: 10px 12px; border-bottom: 1px solid var(--line); display: flex; gap: 10px; align-items: baseline; }
+  ul.log li:last-child { border-bottom: 0; }
+  ul.log .t { color: var(--muted); font-size: .8rem; white-space: nowrap; font-variant-numeric: tabular-nums; }
+  ul.log .m { flex: 1; word-break: break-word; }
+  ul.log .raw { color: var(--muted); font-size: .75rem; display: block; }
+  ul.log li.alert .m { color: var(--alert-fg); font-weight: 700; }
+  ul.log li.warn .m  { color: var(--warn-fg); font-weight: 600; }
+  ul.log li.ok .m    { color: var(--ok-fg); }
+  ul.log li.empty { color: var(--muted); }
+  details { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 4px 12px; margin-top: 14px; }
+  summary { padding: 10px 0; cursor: pointer; }
+  details .row { margin-top: 4px; }
+  .foot { color: var(--muted); font-size: .8rem; margin: 14px 2px 0; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🛏️ AutoBed — แจ้งเตือนพยาบาล</h1>
+  <p class="sub">รับข้อความจากเตียงผ่านบลูทูธ (โมดูล HM-10) แล้วแสดงสถานะ พร้อมเสียงเตือน</p>
+
+  <div id="noBle" class="banner hidden">
+    เบราว์เซอร์นี้ไม่รองรับ Web Bluetooth —
+    บน <b>iPhone</b> ให้เปิดหน้านี้ในแอป <b>Bluefy</b> ส่วน <b>Android</b> ให้ใช้ <b>Chrome</b>
+    (Safari บน iPhone ใช้ไม่ได้) ปุ่มจำลองข้อความด้านล่างยังใช้ทดสอบเสียงได้
+  </div>
+
+  <section id="status" class="status" aria-live="polite">
+    <div class="icon" id="icon">📡</div>
+    <div class="msg" id="msg">ยังไม่ได้เชื่อมต่อ</div>
+    <div class="when" id="when">กด “เชื่อมต่อ” แล้วเลือกอุปกรณ์ BT05</div>
+  </section>
+
+  <div class="row">
+    <button id="btnConnect" class="primary">เชื่อมต่อ</button>
+    <button id="btnMute">หยุดเสียง</button>
+    <button id="btnTest">ทดสอบเสียง</button>
+  </div>
+  <div class="conn" id="conn">สถานะการเชื่อมต่อ: ยังไม่เชื่อมต่อ</div>
+  <div class="hint hidden" id="noData"></div>
+
+  <h2>ประวัติข้อความ</h2>
+  <ul class="log" id="log"><li class="empty">ยังไม่มีข้อความ</li></ul>
+
+  <details>
+    <summary>จำลองข้อความ (ทดสอบหน้านี้โดยไม่ต้องใช้บอร์ด)</summary>
+    <div class="row">
+      <button data-sim="ALERT:NOT ON BED">ไม่อยู่บนเตียง</button>
+      <button data-sim="OK:BACK TO NORMAL">กลับปกติ</button>
+      <button data-sim="WATCH:MOVING A LOT">ขยับมาก</button>
+    </div>
+    <div class="row">
+      <button data-sim="CALL:NURSE NEEDED">เรียกพยาบาล</button>
+      <button data-sim="OK:NURSE ACK">พยาบาลรับทราบ</button>
+      <button data-sim="INFO:TO BATHROOM">ไปห้องน้ำ</button>
+    </div>
+  </details>
+
+  <p class="foot">เสียงเตือนทำงานเฉพาะตอนเปิดหน้านี้ค้างไว้และเชื่อมต่ออยู่ — ถ้าล็อกจอหรือสลับแอป การเชื่อมต่ออาจหลุด
+  ข้อความที่ส่งตอนยังไม่ได้เชื่อมต่อจะไม่ถูกเก็บ ควรเปิดเสียงมือถือและปิดโหมดเงียบ</p>
+</main>
+
+<script>
+/* CORE_BEGIN ======= pure logic (no page access), tested separately ======= */
+const SERVICE_UUID = 0xFFE0;
+const CHAR_UUID = 0xFFE1;
+
+const MESSAGES = [
+  { re: /^ALERT:NOT ON BED$/,    level: 'alert', sound: 'siren', key: 'alert', text: 'ผู้ป่วยไม่อยู่บนเตียง!' },
+  { re: /^ALERT:BATH TOO LONG$/, level: 'alert', sound: 'siren', key: 'alert', text: 'ไปห้องน้ำนานเกินเวลา!' },
+  { re: /^CALL:NURSE NEEDED$/,   level: 'alert', sound: 'call',  key: 'call',  text: 'ผู้ป่วยเรียกพยาบาล!' },
+  { re: /^CALL:NURSE REPEAT$/,   level: 'alert', sound: 'call',  key: 'call',  text: 'เรียกพยาบาลซ้ำ ยังไม่มีคนรับทราบ!' },
+  { re: /^WATCH:MOVING A LOT$/,  level: 'warn',  sound: 'beep2', text: 'ขยับตัวมากผิดปกติ' },
+  { re: /^NOTICE:ON BED LONG$/,  level: 'warn',  sound: 'beep2', text: 'นอนบนเตียงนานเกินไป' },
+  { re: /^INFO:TO BATHROOM$/,    level: 'info',  sound: 'ding',  text: 'ผู้ป่วยไปห้องน้ำ (กำลังจับเวลา)' },
+  { re: /^OK:BACK TO NORMAL$/,   level: 'ok',    sound: 'chime', clears: 'alert', text: 'กลับสู่สถานะปกติ' },
+  { re: /^OK:NURSE ACK$/,        level: 'ok',    sound: 'chime', clears: 'call',  text: 'พยาบาลรับทราบแล้ว' }
+];
+
+function classify(line) {
+  const t = String(line).trim();
+  if (/^AUTOBED OK/.test(t)) {
+    return { kind: 'heartbeat', level: 'info', sound: null, raw: t, text: 'ระบบทำงานปกติ' };
+  }
+  for (const m of MESSAGES) {
+    if (m.re.test(t)) {
+      return { kind: 'event', raw: t, level: m.level, sound: m.sound, key: m.key, clears: m.clears, text: m.text };
+    }
+  }
+  return { kind: 'unknown', level: 'info', sound: null, raw: t, text: t };
+}
+
+/* readable text only: anything else usually means the baud rate does not match */
+function isGarbled(s) { return /[^\x20-\x7E]/.test(s); }
+
+/* BLE delivers up to 20 bytes per notification, so a message can arrive in
+ * pieces. Collect text until a newline, then hand out whole lines. */
+function createLineBuffer(maxLen) {
+  const decoder = new TextDecoder('utf-8');
+  let buf = '';
+  return {
+    push(bytes) {
+      buf += decoder.decode(bytes, { stream: true });
+      const lines = [];
+      let idx;
+      while ((idx = buf.search(/\r?\n/)) !== -1) {
+        const line = buf.slice(0, idx);
+        buf = buf.slice(buf.indexOf('\n', idx) + 1);
+        if (line.trim() !== '') lines.push(line);
+      }
+      if (buf.length > maxLen) { lines.push(buf); buf = ''; }   /* no newline: don't hold forever */
+      return lines;
+    }
+  };
+}
+
+function createAlarmState() { return { alert: false, call: false }; }
+function applyEvent(state, ev) {
+  if (ev.kind !== 'event') return state;
+  if (ev.key) state[ev.key] = true;
+  if (ev.clears) state[ev.clears] = false;
+  return state;
+}
+function anyAlarm(state) { return state.alert || state.call; }
+/* CORE_END */
+
+/* ===================== page code ===================== */
+const $ = (id) => document.getElementById(id);
+const els = {
+  status: $('status'), icon: $('icon'), msg: $('msg'), when: $('when'), conn: $('conn'),
+  log: $('log'), noData: $('noData'), noBle: $('noBle'),
+  btnConnect: $('btnConnect'), btnMute: $('btnMute'), btnTest: $('btnTest')
+};
+const ICONS = { ok: '✅', warn: '⚠️', alert: '🚨', info: 'ℹ️', idle: '📡' };
+
+let device = null, characteristic = null, connected = false;
+let connectedAt = 0, lastDataAt = 0, dataCount = 0;
+let reconnecting = false, userDisconnected = false;
+let muted = false, lastAlertEvent = null, lastEvent = null;
+const alarms = createAlarmState();
+const lineBuffer = createLineBuffer(48);
+
+/* ---------- sound (Web Audio, unlocked by the first tap) ---------- */
+let audioCtx = null;
+function unlockAudio() {
+  try {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  } catch (e) { /* no audio available */ }
+}
+function tone(freq, start, dur, vol) {
+  if (!audioCtx) return;
+  const t0 = audioCtx.currentTime + start;
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
+  osc.type = 'square';
+  osc.frequency.value = freq;
+  gain.gain.setValueAtTime(0.0001, t0);
+  gain.gain.exponentialRampToValueAtTime(vol, t0 + 0.02);
+  gain.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+  osc.connect(gain); gain.connect(audioCtx.destination);
+  osc.start(t0); osc.stop(t0 + dur + 0.02);
+}
+const SOUNDS = {
+  siren: () => { for (let i = 0; i < 4; i++) { tone(960, i * 0.5, 0.24, 0.5); tone(640, i * 0.5 + 0.25, 0.24, 0.5); } },
+  call:  () => { tone(784, 0, 0.3, 0.45); tone(622, 0.35, 0.45, 0.45); tone(784, 1.0, 0.3, 0.45); tone(622, 1.35, 0.45, 0.45); },
+  beep2: () => { tone(880, 0, 0.15, 0.35); tone(880, 0.25, 0.15, 0.35); },
+  ding:  () => { tone(1046, 0, 0.3, 0.3); },
+  chime: () => { tone(660, 0, 0.18, 0.3); tone(880, 0.2, 0.3, 0.3); }
+};
+function play(name) { if (name && SOUNDS[name] && !muted) { unlockAudio(); SOUNDS[name](); } }
+
+/* while an alarm is still active, repeat the siren / call tone every few seconds */
+let alarmTimer = null;
+function refreshAlarmLoop() {
+  if (anyAlarm(alarms) && !muted) {
+    if (!alarmTimer) {
+      alarmTimer = setInterval(() => play(alarms.alert ? 'siren' : 'call'), 4000);
+    }
+  } else if (alarmTimer) {
+    clearInterval(alarmTimer); alarmTimer = null;
+  }
+}
+
+/* ---------- display ---------- */
+function clock(d) { return d.toLocaleTimeString('th-TH', { hour12: false }); }
+
+function renderStatus() {
+  let level = 'idle', text = 'ยังไม่ได้เชื่อมต่อ', sub = 'กด “เชื่อมต่อ” แล้วเลือกอุปกรณ์ BT05';
+  if (anyAlarm(alarms) && lastAlertEvent) {
+    level = 'alert'; text = lastAlertEvent.text;
+    sub = 'ยังไม่ได้รับการแก้ไข • ' + clock(lastAlertEvent.at);
+  } else if (lastEvent) {
+    level = lastEvent.level; text = lastEvent.text; sub = clock(lastEvent.at);
+  } else if (connected) {
+    level = 'info'; text = 'เชื่อมต่อแล้ว'; sub = 'รอข้อความจากเตียง...';
+  }
+  els.status.className = 'status ' + level;
+  els.icon.textContent = ICONS[level];
+  els.msg.textContent = text;
+  els.when.textContent = sub;
+}
+
+function addLog(ev, garbled) {
+  const first = els.log.firstElementChild;
+  if (first && first.classList.contains('empty')) els.log.removeChild(first);
+  const li = document.createElement('li');
+  li.className = garbled ? 'warn' : ev.level;
+  const t = document.createElement('span'); t.className = 't'; t.textContent = clock(ev.at);
+  const m = document.createElement('span'); m.className = 'm';
+  m.textContent = garbled ? 'ข้อมูลเพี้ยน (ลองเปลี่ยนค่า baud ของบอร์ด)' : ev.text;
+  const raw = document.createElement('span'); raw.className = 'raw'; raw.textContent = ev.raw;
+  m.appendChild(raw);
+  li.appendChild(t); li.appendChild(m);
+  els.log.insertBefore(li, els.log.firstChild);
+  while (els.log.children.length > 40) els.log.removeChild(els.log.lastChild);
+}
+
+function setConn(text) { els.conn.textContent = 'สถานะการเชื่อมต่อ: ' + text; }
+
+/* ---------- handling one complete message ---------- */
+function handleLine(line, fromSim) {
+  const garbled = isGarbled(line);
+  const ev = classify(garbled ? '' : line);
+  ev.at = new Date();
+  if (garbled) { ev.raw = line.replace(/[^\x20-\x7E]/g, '?'); ev.text = ev.raw; }
+
+  lastDataAt = Date.now();
+  if (!fromSim) dataCount++;
+  updateNoDataHint();
+
+  if (ev.kind === 'heartbeat') {
+    els.conn.textContent = 'สถานะการเชื่อมต่อ: เชื่อมต่อแล้ว • ข้อความทดสอบล่าสุด ' + clock(ev.at) + ' (' + ev.raw + ')';
+    return;
+  }
+  if (garbled) { addLog(ev, true); return; }
+
+  applyEvent(alarms, ev);
+  if (ev.kind === 'event') {
+    lastEvent = ev;
+    if (ev.key) { lastAlertEvent = ev; muted = false; }   /* a new alarm un-mutes */
+  }
+  addLog(ev, false);
+  play(ev.sound);
+  refreshAlarmLoop();
+  renderStatus();
+}
+
+/* ---------- Bluetooth ---------- */
+function onBytes(bytes) {
+  for (const line of lineBuffer.push(bytes)) handleLine(line, false);
+}
+
+function onNotify(event) {
+  const v = event.target.value;
+  onBytes(new Uint8Array(v.buffer, v.byteOffset, v.byteLength));
+}
+
+async function openLink() {
+  const server = await device.gatt.connect();
+  const service = await server.getPrimaryService(SERVICE_UUID);
+  characteristic = await service.getCharacteristic(CHAR_UUID);
+  await characteristic.startNotifications();
+  characteristic.addEventListener('characteristicvaluechanged', onNotify);
+  connected = true; connectedAt = Date.now(); lastDataAt = 0; dataCount = 0;
+  els.btnConnect.textContent = 'ตัดการเชื่อมต่อ';
+  setConn('เชื่อมต่อแล้ว (' + (device.name || 'อุปกรณ์ BLE') + ')');
+  renderStatus();
+}
+
+async function connect() {
+  unlockAudio();
+  if (!navigator.bluetooth) { els.noBle.classList.remove('hidden'); return; }
+  try {
+    setConn('กำลังค้นหาอุปกรณ์...');
+    device = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SERVICE_UUID] });
+    userDisconnected = false;
+    device.addEventListener('gattserverdisconnected', onDisconnected);
+    setConn('กำลังเชื่อมต่อ...');
+    await openLink();
+  } catch (err) {
+    connected = false;
+    const name = err && err.name ? err.name : '';
+    if (name === 'NotFoundError') setConn('ยกเลิกการเลือกอุปกรณ์');
+    else if (name === 'NetworkError') setConn('เชื่อมต่อไม่สำเร็จ (ลองเลือกใหม่ หรือรีเซ็ตโมดูลแล้วลองอีกครั้ง)');
+    else setConn('เชื่อมต่อไม่สำเร็จ: ' + (err && err.message ? err.message : name));
+    els.btnConnect.textContent = 'เชื่อมต่อ';
+  }
+}
+
+async function onDisconnected() {
+  connected = false; characteristic = null;
+  els.btnConnect.textContent = 'เชื่อมต่อ';
+  renderStatus();
+  if (userDisconnected || reconnecting) { setConn('ตัดการเชื่อมต่อแล้ว'); return; }
+  reconnecting = true;
+  for (let attempt = 1; attempt <= 6 && !connected && !userDisconnected; attempt++) {
+    setConn('หลุดการเชื่อมต่อ กำลังต่อใหม่ (' + attempt + '/6)...');
+    await new Promise((r) => setTimeout(r, 2000));
+    try { await openLink(); } catch (e) { /* try again */ }
+  }
+  reconnecting = false;
+  if (!connected) setConn('หลุดการเชื่อมต่อ กด “เชื่อมต่อ” เพื่อต่อใหม่');
+}
+
+function disconnect() {
+  userDisconnected = true;
+  if (device && device.gatt && device.gatt.connected) device.gatt.disconnect();
+}
+
+/* connected but nothing arrives: usually wiring or baud rate, say so */
+function updateNoDataHint() {
+  const wait = (Date.now() - connectedAt) / 1000;
+  if (connected && dataCount === 0 && wait > 12) {
+    els.noData.classList.remove('hidden');
+    els.noData.textContent = 'เชื่อมต่อกับโมดูลได้แล้ว แต่ยังไม่มีข้อมูลจากบอร์ด — ตรวจสาย PA9 (D8) → RXD ของโมดูล, ' +
+      'ค่า baud (BLE_UART_BRR) และว่าโค้ดล่าสุดถูก flash แล้ว';
+  } else {
+    els.noData.classList.add('hidden');
+  }
+}
+setInterval(updateNoDataHint, 1000);
+
+/* ---------- buttons ---------- */
+els.btnConnect.addEventListener('click', () => { if (connected) disconnect(); else connect(); });
+els.btnMute.addEventListener('click', () => {
+  muted = true; refreshAlarmLoop();
+  els.btnMute.textContent = 'ปิดเสียงแล้ว';
+  setTimeout(() => { els.btnMute.textContent = 'หยุดเสียง'; }, 1500);
+});
+els.btnTest.addEventListener('click', () => { unlockAudio(); const m = muted; muted = false; SOUNDS.siren(); muted = m; });
+document.querySelectorAll('[data-sim]').forEach((b) => {
+  b.addEventListener('click', () => { unlockAudio(); handleLine(b.getAttribute('data-sim'), true); });
+});
+
+if (!navigator.bluetooth) els.noBle.classList.remove('hidden');
+renderStatus();
+</script>
+</body>
+</html>
